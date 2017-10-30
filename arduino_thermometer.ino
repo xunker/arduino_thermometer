@@ -6,8 +6,6 @@
   #define PRO_MICRO // Sparkfun Pro Micro, else Genuino/Arduino Micro
 #endif
 
-// #define TEST_PATTERN // show test patterns on display, not temperature
-
 #ifdef PRO_MICRO
   #define LED_BUILTIN 17
   #define SENSE_PIN A1
@@ -48,14 +46,14 @@ const byte segmentPins[] = {8, 9, 15, 16, 10, 7, A0, 14}; // disp: 11 5 7 1 2 3 
                          // E    C        4    2        (Segment H is often called
                          //  DDDD  H       3333  7      DP, for Decimal Point)
 
-  #ifdef TEST_PATTERN
-    // Bit-segment mapping:  0bHGFEDCBA
-    byte testData[4] = { 0b11111111, 0b11001001, 0b00110110, 0b00011011 };
-  #endif
-
 #else // Arduino/Genuino Micro
-const byte segmentPins[] = {8, A5, 10, A1, A2, A3, A4, 7}; // disp: 11 5 7 1 2 3 4 10
-                        // 11  5  7   1   2   3   4   10
+  const byte segmentPins[] = {8, A5, 10, A1, A2, A3, A4, 7};
+#endif
+
+// #define TEST_PATTERN // show test patterns on display, not temperature
+#ifdef TEST_PATTERN
+  // Bit-segment mapping:  0bHGFEDCBA
+  byte testData[4] = { 0b11111111, 0b11001001, 0b00110110, 0b00011011 };
 #endif
 
 #define LOOP_DELAY 2
@@ -144,8 +142,8 @@ void setup() {
   }
   previousAverageTemperature = initialTemperature;
 
-  // Show scale on display for 1 second or SENSOR_POLL_TIME, whichever is greater
-  // <blank> <degree sign> <letter/blank> <blank>
+  /* Show scale on display for 1 second or SENSOR_POLL_TIME, whichever is greater
+     <blank> <degree sign> <letter/blank> <blank> */
   uint8_t scaleDisplay[numDigits] = { B00000000, B01100011, B00000000, B00000000 };
   if (scale == LOW) {
     // "F"
@@ -192,7 +190,6 @@ void ledOff() {
 float currentTemperatureReading() {
   ledOn();
 
-  // float voltage = analogRead(A0) * (5.0 / 1023.0);
   float voltage = analogRead(SENSE_PIN) * (vcc / 1023.0);
   /* The output of the LM 35 is 10 mV (0.01 volts) per degree Celsius.
      Multiplying the analogRead voltage by 100 turns 0.251 to 25.1. */
