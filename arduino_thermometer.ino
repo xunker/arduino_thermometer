@@ -110,6 +110,14 @@ uint8_t vccReadCounter = VCC_READ_COUNT;
 #include "SevSeg.h"
 SevSeg sevseg; //Initiate a seven segment controller object
 
+void waitAndRefreshDisplay(uint16_t ms) {
+  current = millis();
+  while (millis() < (current + ms)) {
+    sevseg.refreshDisplay(); // Must run repeatedly
+    delay(1);
+  }
+}
+
 void setup() {
   delay(500);
 
@@ -154,11 +162,7 @@ void setup() {
   }
   sevseg.setSegments(scaleDisplay);
 
-  current = millis();
-  while (millis() < (current + 1000)) {
-    sevseg.refreshDisplay(); // Must run repeatedly
-    delay(1);
-  }
+  waitAndRefreshDisplay(1000);
 }
 
 void ledOn() {
