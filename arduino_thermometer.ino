@@ -1,6 +1,5 @@
 /* The output of the LM 35 is 10 mV (0.01 volts) per degree Celsius */
 #include <avr/pgmspace.h>
-#include <math.h> // for round()
 
 #ifdef TXLED0 // Macro only in Pro Micro/Fio board definition, used to detect board type.
   #define PRO_MICRO // Sparkfun Pro Micro, else Genuino/Arduino Micro
