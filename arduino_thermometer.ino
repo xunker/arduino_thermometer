@@ -167,7 +167,7 @@ void setup() {
 
   if (settings.version != eepromVersion) {
     sevseg.setChars("RSET");
-    waitAndRefreshDisplay(500);
+    waitAndRefreshDisplay(100);
     settings.version = eepromVersion;
     settings.lowestTemp = DEFAULT_LOWEST_TEMP;
     settings.highestTemp = DEFAULT_HIGHEST_TEMP;
