@@ -70,7 +70,7 @@ boolean ledState = LOW;
 unsigned long timer = 0; // will be reset every loop()
 unsigned long current = millis();
 
-#define AVERAGE_COUNT 10
+#define AVERAGE_COUNT 20
 float temperatures[AVERAGE_COUNT];
 uint8_t averageTempPosition = 0;
 float previousAverageTemperature;
