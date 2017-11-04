@@ -1,5 +1,6 @@
 /* The output of the LM 35 is 10 mV (0.01 volts) per degree Celsius */
 #include <avr/pgmspace.h>
+#include <EEPROM.h>
 
 #ifdef TXLED0 // Macro only in Pro Micro/Fio board definition, used to detect board type.
   #define PRO_MICRO // Sparkfun Pro Micro, else Genuino/Arduino Micro
@@ -117,6 +118,16 @@ void waitAndRefreshDisplay(uint16_t ms) {
   }
 }
 
+const uint8_t eepromVersion = 8;
+#define DEFAULT_LOWEST_TEMP 155.0
+#define DEFAULT_HIGHEST_TEMP -55.0
+struct Settings {
+  uint8_t version;
+  float lowestTemp;
+  float highestTemp;
+
+} settings;
+
 void setup() {
   delay(500);
 
@@ -135,6 +146,48 @@ void setup() {
 
   sevseg.begin(COMMON_CATHODE, numDigits, digitPins, segmentPins);
 
+  /* Show scale on display for 1 second or SENSOR_POLL_TIME, whichever is greater
+     <blank> <degree sign> <letter/blank> <blank> */
+  uint8_t scaleDisplay[numDigits] = { B00000000, B01100011, B00000000, B00000000 };
+  if (scale == LOW) {
+    // "F"
+    scaleDisplay[2] = B01110001;
+  } else {
+    // "C"
+    scaleDisplay[2] = B00111001;
+  }
+  sevseg.setSegments(scaleDisplay);
+  waitAndRefreshDisplay(1000);
+
+  EEPROM.get(0, settings);
+  // sevseg.setChars("VERS");
+  // waitAndRefreshDisplay(500);
+  // sevseg.setNumber(settings.version);
+  // waitAndRefreshDisplay(1000);
+
+  if (settings.version != eepromVersion) {
+    sevseg.setChars("RSET");
+    waitAndRefreshDisplay(500);
+    settings.version = eepromVersion;
+    settings.lowestTemp = DEFAULT_LOWEST_TEMP;
+    settings.highestTemp = DEFAULT_HIGHEST_TEMP;
+    EEPROM.put(0, settings);
+  }
+
+  sevseg.setChars("HI");
+  waitAndRefreshDisplay(500);
+  sevseg.setNumber(convertedTemperature(settings.highestTemp),1);
+  waitAndRefreshDisplay(1000);
+  sevseg.blank();
+  waitAndRefreshDisplay(500);
+
+  sevseg.setChars("LO");
+  waitAndRefreshDisplay(500);
+  sevseg.setNumber(convertedTemperature(settings.lowestTemp),1);
+  waitAndRefreshDisplay(1000);
+  sevseg.blank();
+  waitAndRefreshDisplay(500);
+
   // set current vcc
   vcc = readVcc();
 
@@ -149,19 +202,6 @@ void setup() {
   }
   previousAverageTemperature = initialTemperature;
 
-  /* Show scale on display for 1 second or SENSOR_POLL_TIME, whichever is greater
-     <blank> <degree sign> <letter/blank> <blank> */
-  uint8_t scaleDisplay[numDigits] = { B00000000, B01100011, B00000000, B00000000 };
-  if (scale == LOW) {
-    // "F"
-    scaleDisplay[2] = B01110001;
-  } else {
-    // "C"
-    scaleDisplay[2] = B00111001;
-  }
-  sevseg.setSegments(scaleDisplay);
-
-  waitAndRefreshDisplay(1000);
 }
 
 void ledOn() {
@@ -198,6 +238,9 @@ float currentTemperatureReading() {
      Multiplying the analogRead voltage by 100 turns 0.251 to 25.1. */
   return voltage*100;
 }
+
+#define EEPROM_CHANGE_COUNTER 10
+uint8_t eepromChangeCounter = 0;
 
 void loop() {
   current = millis();
@@ -236,22 +279,34 @@ void loop() {
 
     previousAverageTemperature = averageTemperature;
 
-    if (scale == FAHRENHEIT) {
-      averageTemperature = (averageTemperature * 1.8) + 32;
-      #ifdef ENABLE_SERIAL
-        Serial.print(F(" "));
-        Serial.print(averageTemperature);
-        Serial.print(F("F"));
-      #endif
+    if (averageTemperature > settings.highestTemp) {
+      settings.highestTemp = averageTemperature;
+    } else if (averageTemperature < settings.lowestTemp) {
+      settings.lowestTemp = averageTemperature;
     }
-    #ifdef ENABLE_SERIAL
-      Serial.println("");
-    #endif
+
+    eepromChangeCounter++;
+
+    if (eepromChangeCounter >= EEPROM_CHANGE_COUNTER) {
+      sevseg.setChars("SAVE");
+      waitAndRefreshDisplay(500);
+      eepromChangeCounter = 0;
+      Settings existingSettings;
+      EEPROM.get(0, existingSettings);
+      if ((settings.highestTemp != existingSettings.highestTemp) ||
+          (settings.lowestTemp != existingSettings.lowestTemp)) {
+        sevseg.setChars("YEP");
+        EEPROM.put(0, settings);
+      } else {
+        sevseg.setChars("NOPE");
+      }
+      waitAndRefreshDisplay(500);
+    }
 
     #ifdef TEST_PATTERN
       sevseg.setSegments(testData);
     #else
-      sevseg.setNumber(averageTemperature, 1);
+      sevseg.setNumber(convertedTemperature(averageTemperature), 1);
     #endif
 
     timer = current;
@@ -279,4 +334,23 @@ void loop() {
   }
 
   sevseg.refreshDisplay(); // Must run repeatedly
+}
+
+float convertedTemperature(float celcius) {
+  if (scale == FAHRENHEIT) {
+    float fahrenheit = (celcius * 1.8) + 32;
+    #ifdef ENABLE_SERIAL
+      Serial.print(F(" "));
+      Serial.print(fahrenheit);
+      Serial.print(F("F"));
+      Serial.println("");
+    #endif
+    return fahrenheit;
+  } else {
+    #ifdef ENABLE_SERIAL
+      Serial.println("");
+    #endif
+    return celcius;
+  }
+
 }
