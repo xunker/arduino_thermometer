@@ -118,6 +118,22 @@ void waitAndRefreshDisplay(uint16_t ms) {
   }
 }
 
+void setCharsAndWait(char str[], uint16_t ms) {
+  sevseg.setChars(str);
+  waitAndRefreshDisplay(ms);
+}
+
+void setFloatAndWait(float numToShow, char decPlaces, uint16_t ms) {
+  sevseg.setNumber(numToShow, decPlaces);
+  waitAndRefreshDisplay(ms);
+}
+
+void blankAndWait(uint16_t ms) {
+  sevseg.blank();
+  waitAndRefreshDisplay(ms);
+}
+
+// #define SHOW_VERSION_ON_STARTUP
 const uint8_t eepromVersion = 8;
 #define DEFAULT_LOWEST_TEMP 155.0
 #define DEFAULT_HIGHEST_TEMP -55.0
@@ -127,6 +143,8 @@ struct Settings {
   float highestTemp;
 
 } settings;
+
+boolean eepromWasReset = false;
 
 void setup() {
   delay(500);
@@ -146,6 +164,22 @@ void setup() {
 
   sevseg.begin(COMMON_CATHODE, numDigits, digitPins, segmentPins);
 
+  EEPROM.get(0, settings);
+  #ifdef SHOW_VERSION_ON_STARTUP
+    setCharsAndWait("VERS", 500);
+    sevseg.setNumber(settings.version);
+    waitAndRefreshDisplay(1000);
+  #endif
+
+  if (settings.version != eepromVersion) {
+    eepromWasReset = true;
+    setCharsAndWait("RSET", 100);
+    settings.version = eepromVersion;
+    settings.lowestTemp = DEFAULT_LOWEST_TEMP;
+    settings.highestTemp = DEFAULT_HIGHEST_TEMP;
+    EEPROM.put(0, settings);
+  }
+
   /* Show scale on display for 1 second or SENSOR_POLL_TIME, whichever is greater
      <blank> <degree sign> <letter/blank> <blank> */
   uint8_t scaleDisplay[numDigits] = { B00000000, B01100011, B00000000, B00000000 };
@@ -159,34 +193,15 @@ void setup() {
   sevseg.setSegments(scaleDisplay);
   waitAndRefreshDisplay(1000);
 
-  EEPROM.get(0, settings);
-  // sevseg.setChars("VERS");
-  // waitAndRefreshDisplay(500);
-  // sevseg.setNumber(settings.version);
-  // waitAndRefreshDisplay(1000);
+  if (!eepromWasReset) {
+    setCharsAndWait("HI", 500);
+    setFloatAndWait(convertedTemperature(settings.highestTemp), 1, 1000);
+    blankAndWait(500);
 
-  if (settings.version != eepromVersion) {
-    sevseg.setChars("RSET");
-    waitAndRefreshDisplay(100);
-    settings.version = eepromVersion;
-    settings.lowestTemp = DEFAULT_LOWEST_TEMP;
-    settings.highestTemp = DEFAULT_HIGHEST_TEMP;
-    EEPROM.put(0, settings);
+    setCharsAndWait("LO", 500);
+    setFloatAndWait(convertedTemperature(settings.lowestTemp), 1, 1000);
+    blankAndWait(500);
   }
-
-  sevseg.setChars("HI");
-  waitAndRefreshDisplay(500);
-  sevseg.setNumber(convertedTemperature(settings.highestTemp),1);
-  waitAndRefreshDisplay(1000);
-  sevseg.blank();
-  waitAndRefreshDisplay(500);
-
-  sevseg.setChars("LO");
-  waitAndRefreshDisplay(500);
-  sevseg.setNumber(convertedTemperature(settings.lowestTemp),1);
-  waitAndRefreshDisplay(1000);
-  sevseg.blank();
-  waitAndRefreshDisplay(500);
 
   // set current vcc
   vcc = readVcc();
@@ -239,8 +254,14 @@ float currentTemperatureReading() {
   return voltage*100;
 }
 
-#define EEPROM_CHANGE_COUNTER 10
-uint8_t eepromChangeCounter = 0;
+#define EEPROM_CHECK_TIME 60000
+// #define SAVE_HI_LO_ON_STARTUP
+#ifdef SAVE_HI_LO_ON_STARTUP
+  unsigned long lastEepromSave = millis() - EEPROM_CHECK_TIME;
+#else
+  unsigned long lastEepromSave = millis();
+#endif
+// #define SHOW_EEPROM_STATUS // show eeprom save/yep/nope messages
 
 void loop() {
   current = millis();
@@ -279,28 +300,30 @@ void loop() {
 
     previousAverageTemperature = averageTemperature;
 
-    if (averageTemperature > settings.highestTemp) {
+    if (averageTemperature > settings.highestTemp)
       settings.highestTemp = averageTemperature;
-    } else if (averageTemperature < settings.lowestTemp) {
+
+    if (averageTemperature < settings.lowestTemp)
       settings.lowestTemp = averageTemperature;
-    }
 
-    eepromChangeCounter++;
-
-    if (eepromChangeCounter >= EEPROM_CHANGE_COUNTER) {
-      sevseg.setChars("SAVE");
-      waitAndRefreshDisplay(500);
-      eepromChangeCounter = 0;
+    if (current > (lastEepromSave + EEPROM_CHECK_TIME)) {
+      #ifdef SHOW_EEPROM_STATUS
+        setCharsAndWait("SAVE", 100);
+      #endif
       Settings existingSettings;
       EEPROM.get(0, existingSettings);
       if ((settings.highestTemp != existingSettings.highestTemp) ||
           (settings.lowestTemp != existingSettings.lowestTemp)) {
-        sevseg.setChars("YEP");
+        #ifdef SHOW_EEPROM_STATUS
+          setCharsAndWait("YEP", 250);
+        #endif
         EEPROM.put(0, settings);
       } else {
-        sevseg.setChars("NOPE");
+        #ifdef SHOW_EEPROM_STATUS
+          setCharsAndWait("NOPE", 250);
+        #endif
       }
-      waitAndRefreshDisplay(500);
+      lastEepromSave = current;
     }
 
     #ifdef TEST_PATTERN
