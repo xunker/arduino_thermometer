@@ -13,7 +13,11 @@
   #define SENSE_PIN A0
 #endif
 
-#define MODE_PIN 2
+#define MODE_PIN 2 // Pullup, only used during startup and then turned off.
+
+#ifdef PRO_MICRO
+  #define DISPLAY_PIN A2 // Used to toggle display of hi/lo after startup and to reset eeprom
+#endif
 
 #ifndef PRO_MICRO
   // I broke the USB port on my pro micro, so no serial :(
@@ -155,6 +159,7 @@ void setup() {
 
   pinMode(SENSE_PIN, INPUT);
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(DISPLAY_PIN, INPUT);
 
   ledOff();
 
@@ -171,9 +176,9 @@ void setup() {
     waitAndRefreshDisplay(1000);
   #endif
 
-  if (settings.version != eepromVersion) {
+  if ((settings.version != eepromVersion) || (digitalRead(DISPLAY_PIN) == HIGH)) {
     eepromWasReset = true;
-    setCharsAndWait("RSET", 100);
+    setCharsAndWait("RSET", 250);
     settings.version = eepromVersion;
     settings.lowestTemp = DEFAULT_LOWEST_TEMP;
     settings.highestTemp = DEFAULT_HIGHEST_TEMP;
@@ -194,13 +199,7 @@ void setup() {
   waitAndRefreshDisplay(1000);
 
   if (!eepromWasReset) {
-    setCharsAndWait("HI", 500);
-    setFloatAndWait(convertedTemperature(settings.highestTemp), 1, 1000);
-    blankAndWait(500);
-
-    setCharsAndWait("LO", 500);
-    setFloatAndWait(convertedTemperature(settings.lowestTemp), 1, 1000);
-    blankAndWait(500);
+    showHiAndLo();
   }
 
   // set current vcc
@@ -217,6 +216,16 @@ void setup() {
   }
   previousAverageTemperature = initialTemperature;
 
+}
+
+void showHiAndLo() {
+  setCharsAndWait("HI", 500);
+  setFloatAndWait(convertedTemperature(settings.highestTemp), 1, 1000);
+  blankAndWait(500);
+
+  setCharsAndWait("LO", 500);
+  setFloatAndWait(convertedTemperature(settings.lowestTemp), 1, 1000);
+  blankAndWait(500);
 }
 
 void ledOn() {
@@ -354,6 +363,10 @@ void loop() {
 
   if ((ledCounter <= 0) && (ledState == HIGH)) {
     ledOff();
+  }
+
+  if (digitalRead(DISPLAY_PIN) == HIGH) {
+    showHiAndLo();
   }
 
   sevseg.refreshDisplay(); // Must run repeatedly
